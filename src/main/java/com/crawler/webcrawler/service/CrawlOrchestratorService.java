@@ -2,6 +2,7 @@ package com.crawler.webcrawler.service;
 
 import com.crawler.webcrawler.model.CrawledPage;
 import com.crawler.webcrawler.model.Job;
+import crawlercommons.robots.BaseRobotRules;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.stereotype.Service;
 
@@ -16,13 +17,14 @@ public class CrawlOrchestratorService {
     private final CrawlerService crawlerService;
     private final PageStorageService pageStorageService;
     private final RobotsTxtService robotsTxtService;
-    private final RateLimiterService rateLimiterService;
+    private final DistributedRateLimiterService rateLimiterService;
+    private static final long DEFAULT_DELAY_MS = 1000;
 
     public CrawlOrchestratorService(RedisStreamQueueService redisStreamQueueService,
                                     CrawlerService crawlerService,
                                     PageStorageService pageStorageService,
                                     RobotsTxtService robotsTxtService,
-                                    RateLimiterService rateLimiterService) {
+                                    DistributedRateLimiterService rateLimiterService) {
         this.redisStreamQueueService = redisStreamQueueService;
         this.crawlerService = crawlerService;
         this.pageStorageService = pageStorageService;
@@ -57,8 +59,8 @@ public class CrawlOrchestratorService {
             }
 
             String domain = URI.create(url).getHost();
-            long delay = rateLimiterService.resolveDelay(rules);
-            rateLimiterService.waitIfNeeded(domain, delay);
+            long delay = resolveDelay(rules);
+            rateLimiterService.acquire(domain, delay);
 
             var result = crawlerService.crawlAndExtract(url);
             job.incrementPagesCrawled();
@@ -81,6 +83,15 @@ public class CrawlOrchestratorService {
         }
 
         System.out.println("--- DONE: job " + jobId + " crawled " + job.getPagesCrawled() + " pages ---");
+    }
+
+    public long resolveDelay(BaseRobotRules rules) {
+        long crawlDelaySeconds = rules.getCrawlDelay();
+        // crawler-commons returns -1 (UNSET_CRAWL_DELAY) if not specified
+        if (crawlDelaySeconds > 0) {
+            return crawlDelaySeconds * 1000;
+        }
+        return DEFAULT_DELAY_MS;
     }
 
     private boolean isSameDomain(String url, String seedDomain) {
