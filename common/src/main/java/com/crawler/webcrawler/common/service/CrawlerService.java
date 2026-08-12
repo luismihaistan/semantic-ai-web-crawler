@@ -34,7 +34,7 @@ public class CrawlerService {
                 }
             }
 
-            System.out.println("📄 " + title + " | 🔗 " + links.size() + " linkuri găsite");
+            System.out.println(title + " |  " + links.size() + " links found");
             return new CrawlResult(title, plainText, links);
 
         } catch (IOException e) {
