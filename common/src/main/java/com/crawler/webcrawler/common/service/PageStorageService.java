@@ -4,6 +4,7 @@ import com.crawler.webcrawler.common.model.CrawledPage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -14,22 +15,26 @@ import java.security.MessageDigest;
 @Service
 public class PageStorageService {
 
-    private static final Path OUTPUT_DIR = Path.of("crawled-pages");
+    private final Path outputDir;
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
             .enable(SerializationFeature.INDENT_OUTPUT);
 
-    public PageStorageService() throws IOException {
-        Files.createDirectories(OUTPUT_DIR);
+    public PageStorageService(@Value("${crawler.storage.output-dir:./crawled-pages}") String outputDirPath) throws IOException {
+        this.outputDir = Path.of(outputDirPath).toAbsolutePath();
+        Files.createDirectories(outputDir);
+        System.out.println("Storing crawled pages at: " + outputDir);
     }
 
     public void save(CrawledPage page) {
         try {
             String filename = hashUrl(page.url()) + ".json";
-            Path filePath = OUTPUT_DIR.resolve(filename);
-            objectMapper.writeValue(filePath.toFile(), page);
-            System.out.println("Saved page to: " + filePath);
+            Path finalPath = outputDir.resolve(filename);
+            Path tempPath = outputDir.resolve(filename + ".tmp");
+
+            objectMapper.writeValue(tempPath.toFile(), page);
+            Files.move(tempPath, finalPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
             System.err.println("Failed to save page: " + page.url() + " -> " + e.getMessage());
         }
