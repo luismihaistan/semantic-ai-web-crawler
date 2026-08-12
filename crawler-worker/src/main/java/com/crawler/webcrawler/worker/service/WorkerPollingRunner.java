@@ -1,6 +1,7 @@
 package com.crawler.webcrawler.worker.service;
 
 import com.crawler.webcrawler.common.service.JobStatusService;
+import com.crawler.webcrawler.common.service.RedisStreamQueueService;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 
@@ -18,11 +19,14 @@ public class WorkerPollingRunner {
     private final JobStatusService jobStatusService;
     private final CrawlOrchestratorService crawlOrchestratorService;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final RedisStreamQueueService redisStreamQueueService;
 
     public WorkerPollingRunner(JobStatusService jobStatusService,
-                               CrawlOrchestratorService crawlOrchestratorService) {
+                               CrawlOrchestratorService crawlOrchestratorService,
+                               RedisStreamQueueService redisStreamQueueService) {
         this.jobStatusService = jobStatusService;
         this.crawlOrchestratorService = crawlOrchestratorService;
+        this.redisStreamQueueService = redisStreamQueueService;
     }
 
     @PostConstruct
@@ -53,12 +57,18 @@ public class WorkerPollingRunner {
                 boolean processed = crawlOrchestratorService.processOne(jobId, CONSUMER_NAME, seedDomain);
 
                 if (!processed) {
-                    // Nothing available right now for this job - it might just be waiting
-                    // on rate limiting elsewhere, or it might genuinely be done.
-                    // We only mark it complete once the queue is confirmed empty AND
-                    // we've reached this point with nothing to do.
-                    jobStatusService.markCompleted(jobId);
-                    System.out.println("Job completed (queue empty): " + jobId);
+                    // Nothing available for THIS worker right now - but that doesn't mean
+                    // the job is done. Other workers might still be holding unacked
+                    // messages (in flight), which could still produce new links.
+                    long streamLength = redisStreamQueueService.getStreamLength(jobId);
+                    long pendingCount = redisStreamQueueService.getPendingCount(jobId);
+
+                    if (streamLength == 0 && pendingCount == 0) {
+                        // Truly nothing left anywhere: no queued messages, no one mid-processing
+                        jobStatusService.markCompleted(jobId);
+                        System.out.println("Job completed (queue confirmed empty): " + jobId);
+                    }
+                    // else: some other worker is still in flight - just wait for the next poll cycle
                 }
 
             } catch (Exception e) {

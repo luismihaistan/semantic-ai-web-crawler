@@ -66,13 +66,23 @@ public class CrawlOrchestratorService {
         }
 
         for (String link : result.links()) {
-            if (isSameDomain(link, seedDomain)) {
-                redisStreamQueueService.pushIfNew(jobId, link);
+            String cleanLink = normalizeUrl(link);
+
+            if (isSameDomain(cleanLink, seedDomain)) {
+                redisStreamQueueService.pushIfNew(jobId, cleanLink);
             }
         }
 
         redisStreamQueueService.ack(jobId, record.getId().getValue());
         return true;
+    }
+
+    private String normalizeUrl(String url) {
+        int hashIndex = url.indexOf('#');
+        if (hashIndex != -1) {
+            return url.substring(0, hashIndex);
+        }
+        return url;
     }
 
     private boolean isSameDomain(String url, String seedDomain) {

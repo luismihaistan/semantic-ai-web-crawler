@@ -79,4 +79,14 @@ public class RedisStreamQueueService {
         redisTemplate.expire(visitedKey(jobId), ttl);
         redisTemplate.expire(streamKey(jobId), ttl);
     }
+
+    public long getStreamLength(String jobId) {
+        Long length = redisTemplate.opsForStream().size(streamKey(jobId));
+        return length != null ? length : 0;
+    }
+
+    public long getPendingCount(String jobId) {
+        var summary = redisTemplate.opsForStream().pending(streamKey(jobId), CONSUMER_GROUP);
+        return summary != null ? summary.getTotalPendingMessages() : 0;
+    }
 }
