@@ -63,6 +63,7 @@ public class CrawlOrchestratorService {
             pageStorageService.save(new CrawledPage(
                     url, result.title(), result.text(), result.links(), Instant.now()
             ));
+            redisStreamQueueService.pushTextForAnalysis(jobId, url, result.title(), result.text());
         }
 
         for (String link : result.links()) {

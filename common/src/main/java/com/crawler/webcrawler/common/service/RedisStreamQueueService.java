@@ -89,4 +89,16 @@ public class RedisStreamQueueService {
         var summary = redisTemplate.opsForStream().pending(streamKey(jobId), CONSUMER_GROUP);
         return summary != null ? summary.getTotalPendingMessages() : 0;
     }
+
+    private String textStreamKey(String jobId) {
+        return "TEXT_TO_ANALYZE:" + jobId;
+    }
+
+    public void pushTextForAnalysis(String jobId, String url, String title, String text) {
+        redisTemplate.opsForStream().add(textStreamKey(jobId), Map.of(
+                "url", url,
+                "title", title != null ? title : "",
+                "text", text != null ? text : ""
+        ));
+    }
 }
