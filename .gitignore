@@ -34,3 +34,5 @@ build/
 
 /crawled-pages
 **/crawled-pages/
+
+.env

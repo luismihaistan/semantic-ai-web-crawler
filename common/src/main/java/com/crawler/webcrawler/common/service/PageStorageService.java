@@ -1,6 +1,7 @@
 package com.crawler.webcrawler.common.service;
 
 import com.crawler.webcrawler.common.model.CrawledPage;
+import com.crawler.webcrawler.common.util.UrlHasher;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -29,7 +30,7 @@ public class PageStorageService {
 
     public void save(CrawledPage page) {
         try {
-            String filename = hashUrl(page.url()) + ".json";
+            String filename = UrlHasher.hash(page.url()) + ".json";
             Path finalPath = outputDir.resolve(filename);
             Path tempPath = outputDir.resolve(filename + ".tmp");
 
@@ -40,15 +41,4 @@ public class PageStorageService {
         }
     }
 
-    private String hashUrl(String url) throws IOException {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(url.getBytes());
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) sb.append(String.format("%02x", b));
-            return sb.substring(0, 16);
-        } catch (Exception e) {
-            throw new IOException("Hashing failed", e);
-        }
-    }
 }

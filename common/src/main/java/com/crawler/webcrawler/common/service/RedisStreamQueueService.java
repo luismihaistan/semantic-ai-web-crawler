@@ -1,9 +1,6 @@
 package com.crawler.webcrawler.common.service;
 
-import org.springframework.data.redis.connection.stream.Consumer;
-import org.springframework.data.redis.connection.stream.MapRecord;
-import org.springframework.data.redis.connection.stream.ReadOffset;
-import org.springframework.data.redis.connection.stream.StreamOffset;
+import org.springframework.data.redis.connection.stream.*;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -90,7 +87,9 @@ public class RedisStreamQueueService {
         return summary != null ? summary.getTotalPendingMessages() : 0;
     }
 
-    private String textStreamKey(String jobId) {
+    private static final String TEXT_CONSUMER_GROUP = "embedding-group";
+
+    public String textStreamKey(String jobId) {
         return "TEXT_TO_ANALYZE:" + jobId;
     }
 
@@ -100,5 +99,50 @@ public class RedisStreamQueueService {
                 "title", title != null ? title : "",
                 "text", text != null ? text : ""
         ));
+    }
+
+    public void ensureTextConsumerGroup(String jobId) {
+        String key = textStreamKey(jobId);
+        try {
+            redisTemplate.opsForStream().createGroup(key, ReadOffset.from("0"), TEXT_CONSUMER_GROUP);
+        } catch (Exception e) {
+            if (!isBusyGroupException(e)) {
+                throw e;
+            }
+        }
+    }
+
+    private boolean isBusyGroupException(Throwable e) {
+        Throwable current = e;
+        while (current != null) {
+            if (current.getMessage() != null && current.getMessage().contains("BUSYGROUP")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    public MapRecord<String, Object, Object> pollText(String jobId, String consumerName) {
+        List<MapRecord<String, Object, Object>> records = redisTemplate.opsForStream().read(
+                Consumer.from(TEXT_CONSUMER_GROUP, consumerName),
+                StreamReadOptions.empty().count(1).block(Duration.ofSeconds(2)),
+                StreamOffset.create(textStreamKey(jobId), ReadOffset.lastConsumed())
+        );
+        return (records == null || records.isEmpty()) ? null : records.get(0);
+    }
+
+    public void ackText(String jobId, String recordId) {
+        redisTemplate.opsForStream().acknowledge(textStreamKey(jobId), TEXT_CONSUMER_GROUP, recordId);
+    }
+
+    public long getTextStreamLength(String jobId) {
+        Long len = redisTemplate.opsForStream().size(textStreamKey(jobId));
+        return len != null ? len : 0;
+    }
+
+    public long getTextPendingCount(String jobId) {
+        var summary = redisTemplate.opsForStream().pending(textStreamKey(jobId), TEXT_CONSUMER_GROUP);
+        return summary != null ? summary.getTotalPendingMessages() : 0;
     }
 }

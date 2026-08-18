@@ -29,6 +29,7 @@ public class JobStatusService {
         fields.put("pagesCrawled", "0");
         redisTemplate.opsForHash().putAll(statusKey(jobId), fields);
         redisTemplate.opsForSet().add("ACTIVE_JOBS", jobId);
+        redisTemplate.opsForSet().add(TEXT_JOBS_SET, jobId);
     }
 
     public void markRunning(String jobId) {
@@ -72,5 +73,24 @@ public class JobStatusService {
     public String getUrl(String jobId) {
         Object value = redisTemplate.opsForHash().get(statusKey(jobId), "url");
         return value != null ? value.toString() : null;
+    }
+
+    private static final String TEXT_JOBS_SET = "TEXT_JOBS";
+
+    public void addTextJob(String jobId) {
+        redisTemplate.opsForSet().add(TEXT_JOBS_SET, jobId);
+    }
+
+    public void removeTextJob(String jobId) {
+        redisTemplate.opsForSet().remove(TEXT_JOBS_SET, jobId);
+    }
+
+    public Set<String> getTextJobIds() {
+        return redisTemplate.opsForSet().members(TEXT_JOBS_SET);
+    }
+
+    public boolean isCrawlFinished(String jobId) {
+        Object status = redisTemplate.opsForHash().get(statusKey(jobId), "status");
+        return status != null && ("COMPLETED".equals(status.toString()) || "FAILED".equals(status.toString()));
     }
 }
