@@ -10,6 +10,42 @@ services:
       - redis_data:/data
     command: redis-server --save 60 1 --loglevel warning
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  master-service:
+    build:
+      context: .
+      dockerfile: master-service/Dockerfile
+    container_name: crawler-master
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  crawler-worker:
+    build:
+      context: .
+      dockerfile: crawler-worker/Dockerfile
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - CRAWLER_STORAGE_OUTPUT_DIR=/data/crawled-pages
+    volumes:
+      - crawled_pages:/data/crawled-pages
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   redis_data:
+  crawled_pages:
