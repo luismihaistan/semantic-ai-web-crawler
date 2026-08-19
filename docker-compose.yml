@@ -61,6 +61,7 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - CRAWLER_STORAGE_OUTPUT_DIR=/data/crawled-pages
+      - HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN}
     volumes:
       - crawled_pages:/data/crawled-pages
     depends_on:
