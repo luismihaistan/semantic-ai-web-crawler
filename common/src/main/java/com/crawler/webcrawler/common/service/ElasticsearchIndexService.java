@@ -1,6 +1,7 @@
-package com.crawler.webcrawler.embedding.service;
+package com.crawler.webcrawler.common.service;
 
 import com.crawler.webcrawler.common.util.UrlHasher;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,7 +12,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -97,5 +100,60 @@ public class ElasticsearchIndexService {
         } catch (Exception e) {
             System.err.println("Failed to index document for " + url + ": " + e.getMessage());
         }
+    }
+
+    public List<Map<String, Object>> searchSimilar(float[] queryEmbedding, int topK) {
+        try {
+            Map<String, Object> knnQuery = Map.of(
+                    "field", "embedding",
+                    "query_vector", queryEmbedding,
+                    "k", topK,
+                    "num_candidates", topK * 10
+            );
+
+            Map<String, Object> requestBody = Map.of(
+                    "knn", knnQuery,
+                    "_source", List.of("url", "title", "text")
+            );
+
+            String body = objectMapper.writeValueAsString(requestBody);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(esHost + "/" + INDEX_NAME + "/_search"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                throw new RuntimeException("Elasticsearch search failed: " + response.body());
+            }
+
+            return parseSearchResults(response.body());
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to search Elasticsearch: " + e.getMessage(), e);
+        }
+    }
+
+    private List<Map<String, Object>> parseSearchResults(String responseBody) throws Exception {
+        JsonNode root = objectMapper.readTree(responseBody);
+        JsonNode hits = root.path("hits").path("hits");
+
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (JsonNode hit : hits) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("score", hit.path("_score").asDouble());
+            result.put("url", hit.path("_source").path("url").asText());
+            result.put("title", hit.path("_source").path("title").asText());
+
+            String text = hit.path("_source").path("text").asText();
+            String snippet = text.length() > 300 ? text.substring(0, 300) + "..." : text;
+            result.put("snippet", snippet);
+
+            results.add(result);
+        }
+        return results;
     }
 }

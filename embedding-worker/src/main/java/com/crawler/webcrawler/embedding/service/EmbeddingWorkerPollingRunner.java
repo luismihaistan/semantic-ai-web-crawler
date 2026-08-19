@@ -1,5 +1,7 @@
 package com.crawler.webcrawler.embedding.service;
 
+import com.crawler.webcrawler.common.service.ElasticsearchIndexService;
+import com.crawler.webcrawler.common.service.HuggingFaceEmbeddingClient;
 import com.crawler.webcrawler.common.service.JobStatusService;
 import com.crawler.webcrawler.common.service.RedisStreamQueueService;
 import jakarta.annotation.PostConstruct;

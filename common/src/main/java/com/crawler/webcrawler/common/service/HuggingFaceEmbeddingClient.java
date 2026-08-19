@@ -1,4 +1,4 @@
-package com.crawler.webcrawler.embedding.service;
+package com.crawler.webcrawler.common.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

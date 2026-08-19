@@ -44,8 +44,12 @@ services:
     environment:
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+      - HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN}
     depends_on:
       redis:
+        condition: service_healthy
+      elasticsearch:
         condition: service_healthy
     restart: unless-stopped
 
