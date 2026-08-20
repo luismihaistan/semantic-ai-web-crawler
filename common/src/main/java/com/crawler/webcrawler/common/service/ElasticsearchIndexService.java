@@ -178,4 +178,55 @@ public class ElasticsearchIndexService {
             System.err.println("Failed to update summary for " + url + ": " + e.getMessage());
         }
     }
+
+    public List<Map<String, Object>> searchForContext(float[] queryEmbedding, int topK, int contextLength) {
+        try {
+            Map<String, Object> knnQuery = Map.of(
+                    "field", "embedding",
+                    "query_vector", queryEmbedding,
+                    "k", topK,
+                    "num_candidates", topK * 10
+            );
+
+            Map<String, Object> requestBody = Map.of(
+                    "knn", knnQuery,
+                    "_source", List.of("url", "title", "text")
+            );
+
+            String body = objectMapper.writeValueAsString(requestBody);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(esHost + "/" + INDEX_NAME + "/_search"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                throw new RuntimeException("Elasticsearch search failed: " + response.body());
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode hits = root.path("hits").path("hits");
+
+            List<Map<String, Object>> results = new ArrayList<>();
+            for (JsonNode hit : hits) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("score", hit.path("_score").asDouble());
+                result.put("url", hit.path("_source").path("url").asText());
+                result.put("title", hit.path("_source").path("title").asText());
+
+                String text = hit.path("_source").path("text").asText();
+                String excerpt = text.length() > contextLength ? text.substring(0, contextLength) : text;
+                result.put("text", excerpt);
+
+                results.add(result);
+            }
+            return results;
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to search Elasticsearch: " + e.getMessage(), e);
+        }
+    }
 }
