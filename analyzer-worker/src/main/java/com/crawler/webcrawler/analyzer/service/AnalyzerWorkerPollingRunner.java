@@ -63,7 +63,12 @@ public class AnalyzerWorkerPollingRunner {
                 boolean crawlFinished = jobStatusService.isCrawlFinished(jobId);
 
                 if (streamLength == 0) {
-                    continue; // nothing ever arrived yet, or already fully drained
+                    if (crawlFinished) {
+                        jobStatusService.markAnalyzerDone(jobId);
+                        lastFailureTime.remove(jobId);
+                        System.out.println("Analyzer: nothing to process for job (crawl finished, no text generated): " + jobId);
+                    }
+                    continue;
                 }
 
                 if (groupsEnsured.add(jobId)) {

@@ -60,10 +60,9 @@ public class WorkerPollingRunner {
                     // Nothing available for THIS worker right now - but that doesn't mean
                     // the job is done. Other workers might still be holding unacked
                     // messages (in flight), which could still produce new links.
-                    long streamLength = redisStreamQueueService.getStreamLength(jobId);
                     long pendingCount = redisStreamQueueService.getPendingCount(jobId);
 
-                    if (streamLength == 0 && pendingCount == 0) {
+                    if (pendingCount == 0) {
                         // Truly nothing left anywhere: no queued messages, no one mid-processing
                         jobStatusService.markCompleted(jobId);
                         System.out.println("Job completed (queue confirmed empty): " + jobId);

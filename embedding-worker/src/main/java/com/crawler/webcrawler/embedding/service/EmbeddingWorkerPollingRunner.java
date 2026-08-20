@@ -65,9 +65,9 @@ public class EmbeddingWorkerPollingRunner {
 
                 if (streamLength == 0) {
                     if (crawlFinished) {
-                        jobStatusService.removeTextJob(jobId);
+                        jobStatusService.markEmbeddingDone(jobId);
                         lastFailureTime.remove(jobId);
-                        System.out.println("Text processing skipped (no data found): " + jobId);
+                        System.out.println("Embedding: nothing to process for job " + jobId);
                     }
                     continue;
                 }
