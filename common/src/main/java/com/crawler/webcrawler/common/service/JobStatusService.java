@@ -93,4 +93,24 @@ public class JobStatusService {
         Object status = redisTemplate.opsForHash().get(statusKey(jobId), "status");
         return status != null && ("COMPLETED".equals(status.toString()) || "FAILED".equals(status.toString()));
     }
+
+    public void markEmbeddingDone(String jobId) {
+        redisTemplate.opsForHash().put(statusKey(jobId), "embeddingDone", "true");
+        tryRemoveIfBothDone(jobId);
+    }
+
+    public void markAnalyzerDone(String jobId) {
+        redisTemplate.opsForHash().put(statusKey(jobId), "analyzerDone", "true");
+        tryRemoveIfBothDone(jobId);
+    }
+
+    private void tryRemoveIfBothDone(String jobId) {
+        Object embeddingDone = redisTemplate.opsForHash().get(statusKey(jobId), "embeddingDone");
+        Object analyzerDone = redisTemplate.opsForHash().get(statusKey(jobId), "analyzerDone");
+
+        if ("true".equals(embeddingDone) && "true".equals(analyzerDone)) {
+            removeTextJob(jobId);
+            System.out.println("Both embedding and analyzer finished - removed job from TEXT_JOBS: " + jobId);
+        }
+    }
 }

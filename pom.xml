@@ -23,5 +23,6 @@
         <module>master-service</module>
         <module>crawler-worker</module>
         <module>embedding-worker</module>
+        <module>analyzer-worker</module>
     </modules>
 </project>

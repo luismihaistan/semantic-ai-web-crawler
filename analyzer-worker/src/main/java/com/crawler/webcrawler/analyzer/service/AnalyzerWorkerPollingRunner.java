@@ -1,9 +1,9 @@
-package com.crawler.webcrawler.embedding.service;
+package com.crawler.webcrawler.analyzer.service;
 
-import com.crawler.webcrawler.common.service.ElasticsearchIndexService;
-import com.crawler.webcrawler.common.service.HuggingFaceEmbeddingClient;
+import com.crawler.webcrawler.common.service.HuggingFaceSummarizationClient;
 import com.crawler.webcrawler.common.service.JobStatusService;
 import com.crawler.webcrawler.common.service.RedisStreamQueueService;
+import com.crawler.webcrawler.common.service.ElasticsearchIndexService;
 import jakarta.annotation.PostConstruct;
 import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.stereotype.Component;
@@ -19,34 +19,33 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Component
-public class EmbeddingWorkerPollingRunner {
+public class AnalyzerWorkerPollingRunner {
 
-    private static final String CONSUMER_NAME = "embedding-worker-" + UUID.randomUUID();
-    private static final Duration FAILURE_BACKOFF = Duration.ofSeconds(10); // Timpul de pauză după eroare
+    private static final String CONSUMER_NAME = "analyzer-worker-" + UUID.randomUUID();
+    private static final Duration FAILURE_BACKOFF = Duration.ofSeconds(10);
 
     private final JobStatusService jobStatusService;
     private final RedisStreamQueueService redisStreamQueueService;
-    private final HuggingFaceEmbeddingClient embeddingClient;
+    private final HuggingFaceSummarizationClient summarizationClient;
     private final ElasticsearchIndexService indexService;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     private final Map<String, Instant> lastFailureTime = new ConcurrentHashMap<>();
     private final Set<String> groupsEnsured = ConcurrentHashMap.newKeySet();
 
-
-    public EmbeddingWorkerPollingRunner(JobStatusService jobStatusService,
-                                        RedisStreamQueueService redisStreamQueueService,
-                                        HuggingFaceEmbeddingClient embeddingClient,
-                                        ElasticsearchIndexService indexService) {
+    public AnalyzerWorkerPollingRunner(JobStatusService jobStatusService,
+                                       RedisStreamQueueService redisStreamQueueService,
+                                       HuggingFaceSummarizationClient summarizationClient,
+                                       ElasticsearchIndexService indexService) {
         this.jobStatusService = jobStatusService;
         this.redisStreamQueueService = redisStreamQueueService;
-        this.embeddingClient = embeddingClient;
+        this.summarizationClient = summarizationClient;
         this.indexService = indexService;
     }
 
     @PostConstruct
     public void start() {
-        System.out.println("Embedding worker started with consumer name: " + CONSUMER_NAME);
+        System.out.println("Analyzer worker started with consumer name: " + CONSUMER_NAME);
         scheduler.scheduleWithFixedDelay(this::pollTextJobs, 0, 500, TimeUnit.MILLISECONDS);
     }
 
@@ -64,43 +63,41 @@ public class EmbeddingWorkerPollingRunner {
                 boolean crawlFinished = jobStatusService.isCrawlFinished(jobId);
 
                 if (streamLength == 0) {
-                    if (crawlFinished) {
-                        jobStatusService.removeTextJob(jobId);
-                        lastFailureTime.remove(jobId);
-                        System.out.println("Text processing skipped (no data found): " + jobId);
-                    }
-                    continue;
+                    continue; // nothing ever arrived yet, or already fully drained
                 }
 
                 if (groupsEnsured.add(jobId)) {
-                    redisStreamQueueService.ensureTextConsumerGroup(jobId);
+                    redisStreamQueueService.ensureAnalyzerConsumerGroup(jobId);
                 }
 
-                MapRecord<String, Object, Object> record = redisStreamQueueService.pollText(jobId, CONSUMER_NAME);
+                MapRecord<String, Object, Object> record = redisStreamQueueService.pollAnalyzer(jobId, CONSUMER_NAME);
 
                 if (record != null) {
                     String url = (String) record.getValue().get("url");
                     String title = (String) record.getValue().get("title");
                     String text = (String) record.getValue().get("text");
 
-                    float[] embedding = embeddingClient.embed(title + " " + text);
-                    indexService.indexDocument(url, title, text, embedding);
+                    String summary = summarizationClient.summarize(title + ". " + text);
 
-                    redisStreamQueueService.ackText(jobId, record.getId().getValue());
-                    System.out.println("Indexed: " + url);
+                    if (summary != null) {
+                        indexService.updateSummary(url, summary);
+                        System.out.println("Summarized: " + url);
+                    } else {
+                        System.out.println("Skipped summarization (insufficient text): " + url);
+                    }
 
+                    redisStreamQueueService.ackAnalyzer(jobId, record.getId().getValue());
                     lastFailureTime.remove(jobId);
                 } else {
-                    long pendingCount = redisStreamQueueService.getTextPendingCount(jobId);
+                    long pendingCount = redisStreamQueueService.getAnalyzerPendingCount(jobId);
                     if (crawlFinished && pendingCount == 0) {
-                        jobStatusService.markEmbeddingDone(jobId);
-                        System.out.println("Embedding processing completed for job: " + jobId);
+                        jobStatusService.markAnalyzerDone(jobId);
+                        System.out.println("Analyzer processing completed for job: " + jobId);
                     }
                 }
             } catch (Exception e) {
-                System.err.println("Error processing text job " + jobId + ": " + e.getMessage());
+                System.err.println("Error processing analyzer job " + jobId + ": " + e.getMessage());
                 lastFailureTime.put(jobId, Instant.now());
-                e.printStackTrace();
             }
         }
     }

@@ -145,4 +145,33 @@ public class RedisStreamQueueService {
         var summary = redisTemplate.opsForStream().pending(textStreamKey(jobId), TEXT_CONSUMER_GROUP);
         return summary != null ? summary.getTotalPendingMessages() : 0;
     }
+
+    private static final String ANALYZER_CONSUMER_GROUP = "analyzer-group";
+
+    public void ensureAnalyzerConsumerGroup(String jobId) {
+        String key = textStreamKey(jobId);
+        try {
+            redisTemplate.opsForStream().createGroup(key, ReadOffset.from("0"), ANALYZER_CONSUMER_GROUP);
+        } catch (Exception e) {
+            if (!isBusyGroupException(e)) throw e;
+        }
+    }
+
+    public MapRecord<String, Object, Object> pollAnalyzer(String jobId, String consumerName) {
+        List<MapRecord<String, Object, Object>> records = redisTemplate.opsForStream().read(
+                Consumer.from(ANALYZER_CONSUMER_GROUP, consumerName),
+                StreamReadOptions.empty().count(1).block(Duration.ofSeconds(2)),
+                StreamOffset.create(textStreamKey(jobId), ReadOffset.lastConsumed())
+        );
+        return (records == null || records.isEmpty()) ? null : records.get(0);
+    }
+
+    public void ackAnalyzer(String jobId, String recordId) {
+        redisTemplate.opsForStream().acknowledge(textStreamKey(jobId), ANALYZER_CONSUMER_GROUP, recordId);
+    }
+
+    public long getAnalyzerPendingCount(String jobId) {
+        var summary = redisTemplate.opsForStream().pending(textStreamKey(jobId), ANALYZER_CONSUMER_GROUP);
+        return summary != null ? summary.getTotalPendingMessages() : 0;
+    }
 }

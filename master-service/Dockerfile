@@ -8,6 +8,7 @@ COPY common/pom.xml common/pom.xml
 COPY master-service/pom.xml master-service/pom.xml
 COPY crawler-worker/pom.xml crawler-worker/pom.xml
 COPY embedding-worker/pom.xml embedding-worker/pom.xml
+COPY analyzer-worker/pom.xml analyzer-worker/pom.xml
 RUN ./mvnw dependency:go-offline -B -pl master-service -am
 
 COPY common/src common/src

@@ -156,4 +156,26 @@ public class ElasticsearchIndexService {
         }
         return results;
     }
+
+    public void updateSummary(String url, String summary) {
+        try {
+            String docId = UrlHasher.hash(url);
+
+            Map<String, Object> update = Map.of("doc", Map.of("summary", summary));
+            String body = objectMapper.writeValueAsString(update);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(esHost + "/" + INDEX_NAME + "/_update/" + docId))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 300) {
+                throw new RuntimeException("Elasticsearch update failed: " + response.body());
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to update summary for " + url + ": " + e.getMessage());
+        }
+    }
 }
