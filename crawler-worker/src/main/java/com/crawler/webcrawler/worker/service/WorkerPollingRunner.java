@@ -51,6 +51,13 @@ public class WorkerPollingRunner {
                     continue;
                 }
 
+                if (!jobStatusService.tryReserveSlot(jobId)) {
+                    // Someone else claimed the last slot(s) between our read and now - stop here
+                    jobStatusService.markCompleted(jobId);
+                    System.out.println("Job completed (slot reservation exhausted): " + jobId);
+                    continue;
+                }
+
                 String seedUrl = jobStatusService.getUrl(jobId);
                 String seedDomain = URI.create(seedUrl).getHost();
 
@@ -60,6 +67,7 @@ public class WorkerPollingRunner {
                     // Nothing available for THIS worker right now - but that doesn't mean
                     // the job is done. Other workers might still be holding unacked
                     // messages (in flight), which could still produce new links.
+                    jobStatusService.releaseSlot(jobId); // nothing was actually consumed - give the slot back
                     long pendingCount = redisStreamQueueService.getPendingCount(jobId);
 
                     if (pendingCount == 0) {

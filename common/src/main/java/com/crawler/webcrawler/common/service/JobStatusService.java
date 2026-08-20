@@ -113,4 +113,19 @@ public class JobStatusService {
             System.out.println("Both embedding and analyzer finished - removed job from TEXT_JOBS: " + jobId);
         }
     }
+
+    public boolean tryReserveSlot(String jobId) {
+        int maxPages = getMaxPages(jobId);
+        Long reserved = redisTemplate.opsForHash().increment(statusKey(jobId), "reservedPages", 1);
+
+        if (reserved > maxPages) {
+            redisTemplate.opsForHash().increment(statusKey(jobId), "reservedPages", -1);
+            return false;
+        }
+        return true;
+    }
+
+    public void releaseSlot(String jobId) {
+        redisTemplate.opsForHash().increment(statusKey(jobId), "reservedPages", -1);
+    }
 }
